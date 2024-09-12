@@ -1,19 +1,33 @@
-""" 自主禁言
-"""
-from enum import Enum
-from typing import Dict, Optional
+"""自主禁言"""
 
-from nonebot import on_command, on_notice
-from nonebot.adapters import Bot, Event
-from nonebot.adapters.cqhttp import (
+from enum import Enum
+
+from nonebot import on_notice, require
+from nonebot.adapters.onebot.v11 import Bot, MessageSegment
+from nonebot.adapters.onebot.v11.event import (
     GroupAdminNoticeEvent,
     GroupMessageEvent,
-    MessageSegment,
     PrivateMessageEvent,
 )
-from nonebot.typing import T_State
+from nonebot.plugin import PluginMetadata
+
+require("nonebot_plugin_alconna")
+from nonebot_plugin_alconna import Alconna, Args, CommandMeta, Match, on_alconna
 
 from src.utils.helpers import render_expression
+
+__plugin_meta__ = PluginMetadata(
+    name="自主禁言",
+    description="禁言自己或解除自己的禁言",
+    usage="""禁言自己，单位为分钟
+/ban 30 (禁言 30 分钟)
+解除禁言
+/ban 0
+如果私聊，则需要再提供群号
+/ban 0 12345678""",
+    supported_adapters={"~onebot.v11"},
+)
+
 
 # region 禁言
 EXPR_OK = (
@@ -54,57 +68,47 @@ def get_ban_type(bot_role: str, sender_role: str) -> BanType:
     return BanType.OK
 
 
-ban_cmd = on_command("ban", aliases={"禁言"}, block=True)
-ban_cmd.__doc__ = """
-ban 禁言
-
-自主禁言
-
-禁言自己，单位为分钟
-/ban 30 (禁言 30 分钟)
-解除禁言
-/ban 0
-如果私聊，则需要再提供群号
-"""
-
-
-@ban_cmd.args_parser
-async def ban_args_parser(bot: Bot, event: Event, state: T_State):
-    """处理参数，转换成数字"""
-    args = str(event.get_message()).strip()
-
-    # 检查输入参数是不是数字
-    if args.isdigit():
-        state[state["_current_key"]] = int(args)
-    else:
-        await ban_cmd.reject("请只输入数字，不然我没法理解呢！")
+ban_cmd = on_alconna(
+    Alconna(
+        "禁言",
+        Args["duration?#时长（分钟）", int],
+        Args["group_id?#群号", int],
+        meta=CommandMeta(
+            description=__plugin_meta__.description,
+            example=__plugin_meta__.usage,
+        ),
+    ),
+    aliases={"ban"},
+    use_cmd_start=True,
+    block=True,
+)
 
 
 @ban_cmd.handle()
-async def ban_handle_first_receive(bot: Bot, event: Event, state: T_State):
+async def ban_handle_first_receive(
+    bot: Bot, duration: Match[int], group_id: Match[int]
+):
     """获取需要的参数"""
     # 如果没有获取机器人在群中的职位，则获取
     if not _bot_role:
         await refresh_bot_role(bot)
 
-    args = str(event.get_message()).strip()
-    if not args:
-        return
-
-    # 检查输入参数是不是数字
-    if args.isdigit():
-        state["duration"] = int(args)
-    else:
-        await ban_cmd.finish("参数必须仅为数字")
+    if duration.available:
+        ban_cmd.set_path_arg("duration", duration.result)
+    if group_id.available:
+        ban_cmd.set_path_arg("group_id", group_id.result)
 
 
-@ban_cmd.got("duration", prompt="你想被禁言多少分钟呢？")
-async def ban_handle_group_message(bot: Bot, event: GroupMessageEvent, state: T_State):
+@ban_cmd.got_path("duration", prompt="你想被禁言多少分钟呢？")
+async def ban_handle_group_message(
+    bot: Bot,
+    event: GroupMessageEvent,
+    duration: int,
+):
     """如果在群里发送，则在当前群禁言/解除"""
     group_id = event.group_id
     user_id = event.user_id
 
-    duration = state["duration"]
     duration_sec = duration * 60
 
     bot_role = _bot_role[group_id]
@@ -136,16 +140,17 @@ async def ban_handle_group_message(bot: Bot, event: GroupMessageEvent, state: T_
         )
 
 
-@ban_cmd.got("duration", prompt="你想被禁言多少分钟呢？")
-@ban_cmd.got("group_id", prompt="请问你想针对哪个群？")
+@ban_cmd.got_path("duration", prompt="你想被禁言多少分钟呢？")
+@ban_cmd.got_path("group_id", prompt="请问你想针对哪个群？")
 async def ban_handle_private_message(
-    bot: Bot, event: PrivateMessageEvent, state: T_State
+    bot: Bot,
+    event: PrivateMessageEvent,
+    duration: int,
+    group_id: int,
 ):
     """如果私聊的话，则向用户请求群号，并仅在支持的群禁言/解除"""
-    group_id = state["group_id"]
     user_id = event.user_id
 
-    duration = state["duration"]
     duration_sec = duration * 60
 
     if group_id not in _bot_role:
@@ -178,7 +183,7 @@ async def ban_handle_private_message(
         await ban_cmd.finish(render_expression(EXPR_OK, duration=duration))
 
 
-async def get_owner_id(group_id: int, bot: Bot) -> Optional[int]:
+async def get_owner_id(group_id: int, bot: Bot) -> int | None:
     """获取群主 QQ 号"""
     group_member_list = await bot.get_group_member_list(group_id=group_id)
     for member in group_member_list:
@@ -196,7 +201,7 @@ async def get_user_role_in_group(user_id: int, group_id: int, bot: Bot) -> str:
 
 # endregion
 # region 机器人是否为管理员
-_bot_role: Dict[int, str] = {}
+_bot_role: dict[int, str] = {}
 
 
 async def refresh_bot_role(bot: Bot) -> None:
@@ -204,7 +209,7 @@ async def refresh_bot_role(bot: Bot) -> None:
     group_list = await bot.get_group_list()
     for group in group_list:
         member_info = await bot.get_group_member_info(
-            group_id=group["group_id"], user_id=bot.self_id
+            group_id=group["group_id"], user_id=int(bot.self_id)
         )
         _bot_role[group["group_id"]] = member_info["role"]
 
@@ -213,9 +218,9 @@ admin_notice = on_notice()
 
 
 @admin_notice.handle()
-async def admin_handle(bot: Bot, event: GroupAdminNoticeEvent, state: T_State):
+async def admin_handle(bot: Bot, event: GroupAdminNoticeEvent):
     """群内管理员发生变化时，更新机器人在群内的身份"""
-    if bot.self_id == event.self_id:
+    if bot.self_id == str(event.self_id):
         if event.sub_type == "set":
             _bot_role[event.group_id] = "admin"
         elif event.sub_type == "unset":

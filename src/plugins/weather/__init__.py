@@ -1,20 +1,25 @@
-""" 天气插件
-"""
-from nonebot import on_command
-from nonebot.adapters import Bot, Event
-from nonebot.adapters.cqhttp import MessageEvent
-from nonebot.typing import T_State
+"""天气插件"""
 
-from .eorzean import eorzean_weather
-from .heweather import heweather
+from nonebot import require
+from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 
-weather_cmd = on_command("weather", aliases={"天气"}, block=True)
-weather_cmd.__doc__ = """
-weather 天气
+require("nonebot_plugin_alconna")
+from nonebot_plugin_alconna import (
+    Alconna,
+    Args,
+    CommandMeta,
+    Match,
+    MultiVar,
+    on_alconna,
+)
 
-天气预报
+from .eorzean_api import eorzean_weather
+from .heweather_api import heweather
 
-查询天气
+__plugin_meta__ = PluginMetadata(
+    name="天气",
+    description="查询天气预报（包括艾欧泽亚）",
+    usage="""查询天气
 /weather 成都
 也支持英文
 /weather chengdu
@@ -23,38 +28,39 @@ weather 天气
 甚至支持最终幻想XIV
 /weather 格里达尼亚
 如果查询结果不对，还可以指定城市所属行政区划
-/weather 西安 黑龙江
-"""
+/weather 西安 黑龙江""",
+    supported_adapters=inherit_supported_adapters("nonebot_plugin_alconna"),
+)
+
+weather_cmd = on_alconna(
+    Alconna(
+        "天气",
+        Args["location?#位置", MultiVar(str, flag="*")],
+        meta=CommandMeta(
+            description=__plugin_meta__.description,
+            example=__plugin_meta__.usage,
+        ),
+    ),
+    aliases={"weather"},
+    use_cmd_start=True,
+    block=True,
+)
 
 
 @weather_cmd.handle()
-async def weather_handle_first_receive(bot: Bot, event: MessageEvent, state: T_State):
-    argv = str(event.message).strip().split()
-
-    if len(argv) == 1:
-        state["location"] = argv[0]
-    if len(argv) > 1:
-        state["location"] = argv[0]
-        state["adm"] = argv[1]
+async def weather_handle_first_receive(location: Match[tuple[str, ...]]):
+    if location.available:
+        weather_cmd.set_path_arg("location", location.result)
 
 
-@weather_cmd.got("location", prompt="你想查询哪个城市的天气呢？")
-async def weather_handle(bot: Bot, event: MessageEvent, state: T_State):
-    weather_report = await get_weather_of_location(state["location"], state.get("adm"))
+@weather_cmd.got_path("location", prompt="你想查询哪个城市的天气呢？")
+async def weather_handle(location: tuple[str, ...]):
+    """查询天气"""
+    weather_report = await get_weather_of_location(*location[:2])
     await weather_cmd.finish(weather_report)
 
 
-@weather_cmd.args_parser
-async def weather_args_parser(bot: Bot, event: Event, state: T_State):
-    args = str(event.get_message()).strip()
-
-    if not args:
-        await weather_cmd.reject("要查询的城市名称不能为空呢，请重新输入！")
-
-    state[state["_current_key"]] = args
-
-
-async def get_weather_of_location(location: str, adm: str = None) -> str:
+async def get_weather_of_location(location: str, adm: str | None = None) -> str:
     """根据城市名与城市所属行政区划获取天气数据"""
     # 艾欧泽亚的天气
     str_data = eorzean_weather(location)

@@ -1,37 +1,36 @@
-from pathlib import Path
-
 import nonebot
-from nonebot.adapters.cqhttp import Bot as CQHTTPBot
-from nonebot.log import default_format, logger
+from nonebot.adapters.discord import Adapter as DiscordAdapter
+from nonebot.adapters.dodo import Adapter as DodoAdapter
+from nonebot.adapters.kaiheila import Adapter as KaiheilaAdapter
+from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+from nonebot.adapters.onebot.v12 import Adapter as OneBotV12Adapter
+from nonebot.adapters.qq import Adapter as QQAdapter
+from nonebot.adapters.red import Adapter as RedAdapter
+from nonebot.adapters.satori import Adapter as SatoriAdapter
+from nonebot.adapters.telegram import Adapter as TelegramAdapter
+from nonebot.log import logger
+from sqlalchemy import StaticPool
 
-nonebot.init()
+nonebot.init(sqlalchemy_engine_options={"poolclass": StaticPool})
 app = nonebot.get_asgi()
 
 driver = nonebot.get_driver()
-driver.register_adapter("cqhttp", CQHTTPBot)
+driver.register_adapter(DiscordAdapter)
+driver.register_adapter(DodoAdapter)
+driver.register_adapter(KaiheilaAdapter)
+driver.register_adapter(OneBotV11Adapter)
+driver.register_adapter(OneBotV12Adapter)
+driver.register_adapter(QQAdapter)
+driver.register_adapter(RedAdapter)
+driver.register_adapter(SatoriAdapter)
+driver.register_adapter(TelegramAdapter)
 
-# 添加额外的配置
-config = nonebot.get_driver().config
-config.home_dir_path = Path().resolve()
-# 插件数据目录
-config.data_dir_path = config.home_dir_path / "data"
+# 替换内置权限
+from src.utils.permission import patch_permission
 
-# 自定义 logger
-logger.add(
-    config.data_dir_path / "logs" / "error.log",
-    rotation="5 MB",
-    diagnose=False,
-    level="ERROR",
-    format=default_format,
-)
+patch_permission()
 
-# 加载外部插件
-nonebot.load_plugin("nonebot_plugin_sentry")
-# 加载开发环境插件
-if config.debug:
-    nonebot.load_plugin("nonebot_plugin_test")
-    nonebot.load_plugin("nonebot_plugin_docs")
-# 加载自己的插件
+# 加载插件
 nonebot.load_from_toml("pyproject.toml")
 
 if __name__ == "__main__":

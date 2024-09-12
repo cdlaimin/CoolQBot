@@ -7,17 +7,159 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [0.19.2] - 2024-08-20
+
+### Fixed
+
+- 再次修复运行迁移脚本时加载插件报错
+- 修复无法正常启用和禁用启动问好的问题
+- 修复 Discord 适配器无法代理的问题
+
+## [0.19.1] - 2024-08-17
+
+### Added
+
+- 优化 NoneBot 的性能
+
+## [0.19.0] - 2024-08-16
+
+### Added
+
+- 使用 alc 改造插件
+- memes 增加表情调用次数统计
+
+### Fixed
+
+- 修复插件订阅 B 站和最终幻想XIV 出错的问题
+- 修复运行迁移脚本时加载插件报错
+- 修复未配置 QQ 机器人时的报错
+- 修复表情包插件字体缺失的问题
+
+## [0.18.1] - 2024-08-07
+
+### Added
+
+- 支持 QQ 机器人平台的校验文件
+- 通过脚本更新 fflogs 的数据
+
+## [0.18.0] - 2024-07-22
+
+### Added
+
+- 升级至 Pydantic V2
+- 添加 Discord 和 Telegram 适配器
+- 新增机器人健康检查 API
+
+### Changed
+
+- 优化每日委托的体验
+- 替换内置的超级用户权限
+- 直接使用 Python 官方镜像
+
+## [0.17.5] - 2024-02-27
+
+### Added
+
+- 添加每日委托配对查询功能
+
+## [0.17.4] - 2023-11-30
+
+### Added
+
+- 添加 DoDo 和 Villa 适配器
+
+### Fixed
+
+- 修复无法捕获 NoneBot 错误日志的问题
+- 修复打卡历史选项不直观的问题
+
+## [0.17.3] - 2023-11-24
+
+### Added
+
+- 支持 QQ 适配器下频道的 admin 权限
+
+### Fixed
+
+- 修复超级管理员权限判断问题
+- 通过环境变量设置 token
+- 处理参数有多余的空格的情况
+
+## [0.17.2] - 2023-11-22
+
+### Fixed
+
+- 状态插件默认不发送 Disk 数据
+
+## [0.17.1] - 2023-11-21
+
+### Fixed
+
+- 修复获取用户时的报错
+
+## [0.17.0] - 2023-11-20
+
+### Added
+
+- 添加 QQ 适配器
+- 添加 Satori 适配器
+- 通过用户名判断是否是超级用户
+
+### Changed
+
+- 使用 orm 插件
+
+### Removed
+
+- 移除 gscode 与 pcr 插件
+
+## [0.16.1] - 2023-11-15
+
+### Added
+
+- 添加多适配器支持
+- 添加用户插件
+
+### Fixed
+
+- 修复和风天气无法找到城市时报错的问题
+
+## [0.16.0] - 2023-07-28
+
+### Added
+
+- 添加数据库插件
+- 添加词云插件
+- FFLogs 添加设置缓存的命令
+- 适配插件元信息
+- 使用 nonebot-plugin-treehelp 生成插件帮助
+- 添加赛博医院，支持入院，出院和查房
+- 添加打卡功能，支持健身，饮食，体重，体质打卡
+
+### Changed
+
+- 适配 NoneBot2 2.0.0
+- 利用新版 NoneBot2 特性简化帮助
+- 将 FFlogs 缓存数据存放至缓存目录
+- 直接使用 nonebot-bison 0.8.0 版本
+- 利用 eorzeaenv 计算艾欧泽亚天气
+
+### Removed
+
+- 删除 `公主连结Re:Dive` 插件中定时推送功能
+- 移除机器人插件
+
 ## [0.15.3] - 2021-12-19
 
 ### Added
 
-- 添加最终幻想XIV查价功能
+- 添加 `最终幻想XIV` 查价功能
 
 ## [0.15.2] - 2021-11-21
 
 ### Added
 
-- 添加最终幻想XIV时尚品鉴功能
+- 添加 `最终幻想XIV` 时尚品鉴功能
 
 ### Changed
 
@@ -54,7 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Removed
 
-- 移除最终幻想XIV与公主链接插件中的新闻订阅功能（可通过订阅插件替代）
+- 移除 `最终幻想XIV` 与公主链接插件中的新闻订阅功能（可通过订阅插件替代）
 
 ### Fixed
 
@@ -70,7 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 ### Changed
 
 - 更新至 NoneBot2 2.0.0a13
-- 最终幻想XIV使用新闻发布日期作为推送判定标准
+- `最终幻想XIV` 使用新闻发布日期作为推送判定标准
 
 ## [0.14.0] - 2020-11-30
 
@@ -88,7 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Removed
 
-- B站番剧查询
+- B 站番剧查询
 - `yobot` 集成
 - `NLP` 相关模块
 
@@ -101,7 +243,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Added
 
-- 最终幻想XIV新闻自动推送
+- `最终幻想XIV` 新闻自动推送
 
 ### Changed
 
@@ -419,7 +561,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 - 正常工作的版本。
 
-[Unreleased]: https://github.com/he0119/CoolQBot/compare/v0.15.3...HEAD
+[unreleased]: https://github.com/he0119/CoolQBot/compare/v0.19.2...HEAD
+[0.19.2]: https://github.com/he0119/CoolQBot/compare/v0.19.1...v0.19.2
+[0.19.1]: https://github.com/he0119/CoolQBot/compare/v0.19.0...v0.19.1
+[0.19.0]: https://github.com/he0119/CoolQBot/compare/v0.18.1...v0.19.0
+[0.18.1]: https://github.com/he0119/CoolQBot/compare/v0.18.0...v0.18.1
+[0.18.0]: https://github.com/he0119/CoolQBot/compare/v0.17.5...v0.18.0
+[0.17.5]: https://github.com/he0119/CoolQBot/compare/v0.17.4...v0.17.5
+[0.17.4]: https://github.com/he0119/CoolQBot/compare/v0.17.3...v0.17.4
+[0.17.3]: https://github.com/he0119/CoolQBot/compare/v0.17.2...v0.17.3
+[0.17.2]: https://github.com/he0119/CoolQBot/compare/v0.17.1...v0.17.2
+[0.17.1]: https://github.com/he0119/CoolQBot/compare/v0.17.0...v0.17.1
+[0.17.0]: https://github.com/he0119/CoolQBot/compare/v0.16.1...v0.17.0
+[0.16.1]: https://github.com/he0119/CoolQBot/compare/v0.16.0...v0.16.1
+[0.16.0]: https://github.com/he0119/CoolQBot/compare/v0.15.3...v0.16.0
 [0.15.3]: https://github.com/he0119/CoolQBot/compare/v0.15.2...v0.15.3
 [0.15.2]: https://github.com/he0119/CoolQBot/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/he0119/CoolQBot/compare/v0.15.0...v0.15.1

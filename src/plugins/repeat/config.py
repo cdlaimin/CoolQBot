@@ -1,32 +1,18 @@
-""" 配置文件
-"""
-from nonebot import get_driver
-from pydantic import BaseSettings, validator
+"""配置文件"""
 
-from src.utils.helpers import groupidtostr, strtogroupid
-from src.utils.plugin import PluginData
-
-DATA = PluginData("repeat")
+from nonebot import get_driver, get_plugin_config
+from pydantic import BaseModel
 
 
-class Config(BaseSettings):
-    # 复读概率
-    repeat_rate: int = int(DATA.config.get("repeat", "rate", fallback="10"))
-    # 复读间隔
-    repeat_interval: int = int(DATA.config.get("repeat", "interval", fallback="1"))
-    # 启用的群
-    group_id: list[int] = strtogroupid(DATA.config.get("repeat", "group_id"))
+class Config(BaseModel):
+    repeat_rate: int = 10
+    """ 复读概率 """
+    repeat_interval: int = 1
+    """ 复读间隔 """
 
-    @validator("group_id", always=True)
-    def group_id_validator(cls, v):
-        """验证并保存配置"""
-        DATA.config.set("repeat", "group_id", groupidtostr(v))
-        return v
-
-    class Config:
-        extra = "ignore"
-        validate_assignment = True
+    repeat_migration_group_id: int | None = None
+    """ 旧数据迁移的群号 """
 
 
 global_config = get_driver().config
-plugin_config = Config(**global_config.dict())
+plugin_config = get_plugin_config(Config)

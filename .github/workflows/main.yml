@@ -3,11 +3,14 @@ name: CI
 on:
   push:
     branches:
-      - 'master'
-      - 'dev'
+      - "master"
   pull_request:
   release:
     types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -18,24 +21,42 @@ jobs:
       version: ${{ steps.setVersion.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/checkout@v4
+
+      - name: Set timezone
+        run: sudo timedatectl set-timezone 'Asia/Shanghai'
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v2
         with:
-          python-version: 3.9
-      - name: Install poetry
-        run: curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py | python -
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Run tests
+        run: uv run poe test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Set build version
         id: setVersion
         run: |
-          VERSION=$(poetry version -s)
+          VERSION=$(uv tree -d0 | grep -oP 'coolqbot v\K[0-9]+\.[0-9]+\.[0-9]+')
           COMMIT_ID=$(git rev-parse --short HEAD)
           if [[ "${{github.event_name}}" == "release" && "${{github.event.action}}" == "published" ]]; then
-            echo "::set-output name=environment::prod"
-            echo "::set-output name=version::$VERSION"
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=environment::dev"
-            echo "::set-output name=version::$VERSION-git.$COMMIT_ID"
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "version=$VERSION-git.$COMMIT_ID" >> $GITHUB_OUTPUT
           fi
 
   docker:
@@ -44,60 +65,89 @@ jobs:
     needs: test
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Set version
-        run: |
-          sed -ri "s#SENTRY_RELEASE=version#SENTRY_RELEASE=$VERSION#g" Dockerfile
-        env:
-          VERSION: ${{ needs.test.outputs.version }}
-      - name: Docker meta
-        id: docker_meta
-        uses: crazy-max/ghaction-docker-meta@v1
-        with:
-          images: he0119/coolqbot
+        uses: actions/checkout@v4
+
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to DockerHub
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Docker meta
+        if: github.event_name != 'pull_request'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: he0119/coolqbot
+
       - name: Build and push
-        uses: docker/build-push-action@v2
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.docker_meta.outputs.tags }}
-          labels: ${{ steps.docker_meta.outputs.labels }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.test.outputs.version }}
+
+      - name: Build for test
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: he0119/coolqbot:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.test.outputs.version }}
+
+      - name: Test Image
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run --name test-docker-container -d he0119/coolqbot:test > /dev/null
+
+          sleep 10
+
+          CONTAINER_STATE=$(docker ps -f name=test-docker-container -a --format '{{.State}}')
+          if [[ $CONTAINER_STATE = "running" ]]; then
+              echo "container still running, check passed"
+              docker rm -f test-docker-container > /dev/null
+              exit
+          else
+              echo "container exited"
+              docker logs test-docker-container
+              docker rm test-docker-container > /dev/null
+              exit 1
+          fi
 
   deploy_dev:
     name: Deploy Dev
     runs-on: ubuntu-latest
     environment: dev
     needs: docker
-    if: ${{ github.ref == 'refs/heads/dev' }}
+    if: github.event_name != 'pull_request'
     steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@master
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
+      - name: Tailscale
+        uses: tailscale/github-action@v2
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script_stop: true
-          envs: TAG_NAME
-          script: |
-            cd coolqbot/dev
-            sed -i "s#he0119/coolqbot:.*#he0119/coolqbot:dev#g" docker-compose.yml
-            sudo docker-compose pull
-            sudo docker-compose down
-            sudo docker-compose up -d
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy to server
+        run: tailscale ssh ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} ${{ secrets.DEPLOY_SCRIPT }}
 
   deploy_prod:
     name: Deploy Prod
@@ -106,22 +156,15 @@ jobs:
     needs: docker
     if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
     steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@master
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
+      - name: Tailscale
+        uses: tailscale/github-action@v2
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script_stop: true
-          envs: TAG_NAME
-          script: |
-            cd coolqbot/prod
-            sed -i "s#he0119/coolqbot:.*#he0119/coolqbot:$TAG_NAME#g" docker-compose.yml
-            sudo docker-compose pull
-            sudo docker-compose down
-            sudo docker-compose up -d
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy to server
+        run: tailscale ssh ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} ${{ secrets.DEPLOY_SCRIPT }}
 
   sentry_release:
     name: Sentry Release
@@ -130,9 +173,8 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
+        uses: actions/checkout@v4
+
       - name: Create Sentry release
         uses: getsentry/action-release@v1
         env:
